@@ -2,19 +2,24 @@ import { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, Heart, Beer, HelpCircle } from 'lucide-react';
 import { DayStatus } from '../types';
 import { getMonthRecords, upsertDailyRecord } from '../lib/db';
+import { toLocalDateString } from '../lib/utils';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function Calendar() {
+  const { user } = useAuth();
+  const userId = user?.id ?? '';
   const [currentDate, setCurrentDate] = useState(new Date());
   const [records, setRecords] = useState<Map<string, DayStatus>>(new Map());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const loadMonthData = async (date: Date) => {
+    if (!userId) return;
     try {
       setLoading(true);
       const year = date.getFullYear();
       const month = date.getMonth() + 1;
-      const data = await getMonthRecords(year, month);
+      const data = await getMonthRecords(userId, year, month);
       const recordMap = new Map(data.map(r => [r.date, r.status]));
       setRecords(recordMap);
     } catch (error) {
@@ -26,7 +31,7 @@ export default function Calendar() {
 
   useEffect(() => {
     loadMonthData(currentDate);
-  }, [currentDate]);
+  }, [currentDate, userId]);
 
   const getDaysInMonth = (date: Date): Date[] => {
     const year = date.getFullYear();
@@ -35,7 +40,8 @@ export default function Calendar() {
     const lastDay = new Date(year, month + 1, 0);
     const days: Date[] = [];
 
-    const startPadding = firstDay.getDay();
+    // 月曜始まり: getDay() 0=日, 1=月... 6=土 → 月=0, 日=6 に変換
+    const startPadding = (firstDay.getDay() + 6) % 7;
     for (let i = startPadding - 1; i >= 0; i--) {
       const paddingDate = new Date(year, month, -i);
       days.push(paddingDate);
@@ -57,13 +63,13 @@ export default function Calendar() {
   };
 
   const handleDateClick = (date: Date) => {
-    const dateString = date.toISOString().split('T')[0];
+    const dateString = toLocalDateString(date);
     setSelectedDate(dateString);
   };
 
   const handleStatusSelect = async (status: DayStatus) => {
-    if (selectedDate) {
-      await upsertDailyRecord(selectedDate, status);
+    if (selectedDate && userId) {
+      await upsertDailyRecord(userId, selectedDate, status);
       await loadMonthData(currentDate);
       setSelectedDate(null);
     }
@@ -110,7 +116,7 @@ export default function Calendar() {
         </div>
 
         <div className="grid grid-cols-7 gap-2 mb-2">
-          {['日', '月', '火', '水', '木', '金', '土'].map(day => (
+          {['月', '火', '水', '木', '金', '土', '日'].map(day => (
             <div key={day} className="text-center text-sm font-medium text-gray-500 py-2">
               {day}
             </div>
@@ -122,7 +128,7 @@ export default function Calendar() {
         ) : (
           <div className="grid grid-cols-7 gap-2">
             {days.map((date, index) => {
-              const dateString = date.toISOString().split('T')[0];
+              const dateString = toLocalDateString(date);
               const status = records.get(dateString);
               const isOtherMonth = !isCurrentMonth(date);
 

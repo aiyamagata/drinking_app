@@ -1,33 +1,45 @@
 import { useEffect, useState } from 'react';
 import { Heart, Beer, HelpCircle } from 'lucide-react';
-import { DailyRecord, DayStatus, Goals, Progress } from '../types';
-import { getTodayRecord, upsertDailyRecord, getRecordsForDateRange, getGoals } from '../lib/db';
-import { getWeekDateRange, getMonthDateRange, getLast7Days, calculateProgress, formatDate, getDayOfWeek } from '../lib/utils';
+import { DayStatus, Progress } from '../types';
+import { getTodayRecord, upsertDailyRecord, getRecordsForDateRange, getGoals, getLatestAiMessages, updateCharacterLevel } from '../lib/db';
+import { getWeekDateRange, getMonthDateRange, getLast7Days, calculateProgress, formatDate, getDayOfWeek, toLocalDateString, getDailyTip, getWeeklySummary, getEncouragement, calculateCharacterLevel } from '../lib/utils';
+import Character from './Character';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function Home() {
+  const { user } = useAuth();
+  const userId = user?.id ?? '';
   const [todayStatus, setTodayStatus] = useState<DayStatus>('unset');
   const [weekProgress, setWeekProgress] = useState<Progress>({ current: 0, target: 2, percentage: 0 });
   const [monthProgress, setMonthProgress] = useState<Progress>({ current: 0, target: 8, percentage: 0 });
   const [last7Days, setLast7Days] = useState<{ date: string; status: DayStatus }[]>([]);
+  const [aiMessages, setAiMessages] = useState<Record<'weekly_summary' | 'encouragement' | 'daily_tip', string> | null>(null);
+  const [characterLevel, setCharacterLevel] = useState<number>(1);
   const [loading, setLoading] = useState(true);
 
   const loadData = async () => {
+    if (!userId) return;
     try {
       setLoading(true);
-      const today = await getTodayRecord();
+      const today = await getTodayRecord(userId);
       setTodayStatus(today?.status || 'unset');
 
-      const goals = await getGoals();
+      const goals = await getGoals(userId);
       const weeklyGoal = goals?.weekly_goal || 2;
       const monthlyGoal = goals?.monthly_goal || 8;
 
       const weekRange = getWeekDateRange();
-      const weekRecords = await getRecordsForDateRange(weekRange.start, weekRange.end);
+      const weekRecords = await getRecordsForDateRange(userId, weekRange.start, weekRange.end);
       setWeekProgress(calculateProgress(weekRecords, weeklyGoal));
 
       const monthRange = getMonthDateRange();
-      const monthRecords = await getRecordsForDateRange(monthRange.start, monthRange.end);
+      const monthRecords = await getRecordsForDateRange(userId, monthRange.start, monthRange.end);
       setMonthProgress(calculateProgress(monthRecords, monthlyGoal));
+
+      const restCountThisMonth = monthRecords.filter(r => r.status === 'rest').length;
+      const level = calculateCharacterLevel(restCountThisMonth);
+      await updateCharacterLevel(userId, level);
+      setCharacterLevel(level);
 
       const dates = getLast7Days();
       const dateMap = new Map(weekRecords.map(r => [r.date, r.status]));
@@ -35,6 +47,9 @@ export default function Home() {
         date,
         status: dateMap.get(date) || 'unset'
       })));
+
+      const latestAi = await getLatestAiMessages();
+      setAiMessages(latestAi);
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {
@@ -44,11 +59,12 @@ export default function Home() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [userId]);
 
   const handleStatusChange = async (status: DayStatus) => {
-    const today = new Date().toISOString().split('T')[0];
-    await upsertDailyRecord(today, status);
+    if (!userId) return;
+    const today = toLocalDateString();
+    await upsertDailyRecord(userId, today, status);
     setTodayStatus(status);
     await loadData();
   };
@@ -85,8 +101,30 @@ export default function Home() {
     );
   }
 
+  const todayLocal = toLocalDateString();
+  const dailyTip = aiMessages?.daily_tip ?? getDailyTip(todayLocal);
+  const weeklySummary = aiMessages?.weekly_summary ?? getWeeklySummary(weekProgress);
+  const encouragement = aiMessages?.encouragement ?? getEncouragement(weekProgress);
+
   return (
     <div className="space-y-6 pb-6">
+      <div className="bg-white rounded-3xl shadow-lg p-6 flex flex-col items-center">
+        <Character level={characterLevel}
+        imageSrcByLevel={{
+          1: '/images/level1.png',
+          2: '/images/level2.png',
+          3: '/images/level3.png',
+          4: '/images/level4.png',
+          5: '/images/level5.png',
+          6: '/images/level6.png',
+          7: '/images/level7.png',
+          8: '/images/level8.png',
+          9: '/images/level9.png',
+          10: '/images/level10.png'
+        }}
+        />
+      </div>
+
       <div className="bg-white rounded-3xl shadow-lg p-6">
         <h2 className="text-2xl font-bold text-gray-800 mb-4 text-center">今日の記録</h2>
         <div className="flex justify-center gap-4">
@@ -160,6 +198,15 @@ export default function Home() {
               )}
             </div>
           </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-3xl shadow-lg p-6">
+        <p className="text-sm text-gray-600">{weeklySummary}</p>
+        <p className="text-base font-bold text-gray-800 mt-2">{encouragement}</p>
+        <div className="mt-4 rounded-2xl bg-gradient-to-r from-pink-50 to-yellow-50 p-4">
+          <div className="text-xs font-bold text-gray-500 mb-1">今日の1文</div>
+          <div className="text-sm text-gray-700">{dailyTip}</div>
         </div>
       </div>
 

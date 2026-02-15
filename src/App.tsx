@@ -1,24 +1,60 @@
 import { useState } from 'react';
-import { Home as HomeIcon, CalendarDays, Settings as SettingsIcon } from 'lucide-react';
+import { Home as HomeIcon, CalendarDays, Settings as SettingsIcon, LogOut } from 'lucide-react';
+import { useAuth } from './contexts/AuthContext';
 import Home from './components/Home';
 import Calendar from './components/Calendar';
 import Settings from './components/Settings';
+import Login from './components/Login';
 
 type Screen = 'home' | 'calendar' | 'settings';
 
 function App() {
+  const { user, loading: authLoading, signOut } = useAuth();
   const [currentScreen, setCurrentScreen] = useState<Screen>('home');
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-pink-50 to-yellow-50">
-      <div className="max-w-2xl mx-auto px-4 py-6">
-        <header className="mb-6">
+  if (authLoading) {
+    return (
+      <div className="zen-maru-gothic-regular min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-pink-50 to-yellow-50">
+        <div className="text-2xl text-gray-400">読み込み中...</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="zen-maru-gothic-regular min-h-screen bg-gradient-to-br from-blue-50 via-pink-50 to-yellow-50">
+        <header className="pt-6 pb-4">
           <h1 className="text-3xl font-bold text-center bg-gradient-to-r from-blue-600 to-pink-600 bg-clip-text text-transparent">
             休肝日チャレンジ
           </h1>
           <p className="text-center text-gray-600 text-sm mt-2">
             健康的なお酒ライフをサポート
           </p>
+        </header>
+        <Login />
+      </div>
+    );
+  }
+
+  return (
+    <div className="zen-maru-gothic-regular min-h-screen bg-gradient-to-br from-blue-50 via-pink-50 to-yellow-50">
+      <div className="max-w-2xl mx-auto px-4 py-6">
+        <header className="mb-6 flex items-start justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-3xl font-bold text-center bg-gradient-to-r from-blue-600 to-pink-600 bg-clip-text text-transparent">
+              休肝日チャレンジ
+            </h1>
+            <p className="text-center text-gray-600 text-sm mt-2">
+              健康的なお酒ライフをサポート
+            </p>
+          </div>
+          <button
+            onClick={() => signOut()}
+            className="flex-shrink-0 p-2 rounded-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+            title="ログアウト"
+          >
+            <LogOut className="w-6 h-6" />
+          </button>
         </header>
 
         <main className="mb-20">

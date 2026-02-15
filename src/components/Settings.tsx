@@ -1,22 +1,22 @@
 import { useEffect, useState } from 'react';
 import { Target, Save } from 'lucide-react';
 import { getGoals, updateGoals } from '../lib/db';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function Settings() {
+  const { user } = useAuth();
+  const userId = user?.id ?? '';
   const [weeklyGoal, setWeeklyGoal] = useState(2);
   const [monthlyGoal, setMonthlyGoal] = useState(8);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  useEffect(() => {
-    loadGoals();
-  }, []);
-
   const loadGoals = async () => {
+    if (!userId) return;
     try {
       setLoading(true);
-      const goals = await getGoals();
+      const goals = await getGoals(userId);
       if (goals) {
         setWeeklyGoal(goals.weekly_goal);
         setMonthlyGoal(goals.monthly_goal);
@@ -28,10 +28,15 @@ export default function Settings() {
     }
   };
 
+  useEffect(() => {
+    loadGoals();
+  }, [userId]);
+
   const handleSave = async () => {
+    if (!userId) return;
     try {
       setSaving(true);
-      await updateGoals(weeklyGoal, monthlyGoal);
+      await updateGoals(userId, weeklyGoal, monthlyGoal);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (error) {
